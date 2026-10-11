@@ -1,0 +1,32 @@
+{
+  "artifact_audit": {
+    "status": "passed",
+    "checked_files": 12,
+    "splits": {
+      "train": {
+        "stories": 18000,
+        "tokens": 3938251,
+        "windows": 21857
+      },
+      "validation": {
+        "stories": 1000,
+        "tokens": 223861,
+        "windows": 1235
+      },
+      "test": {
+        "stories": 1000,
+        "tokens": 218490,
+        "windows": 1224
+      }
+    }
+  },
+  "offline_tests": {
+    "passed": 9,
+    "failed": 0
+  },
+  "reproduction": {
+    "identical_artifact_checksums": true,
+    "files_compared": 12,
+    "different_files": []
+  }
+}

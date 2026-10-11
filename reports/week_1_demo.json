@@ -1,0 +1,40 @@
+{
+  "original_text": "  A little fox\n  found a red ball.  ",
+  "cleaned_text": "A little fox found a red ball.",
+  "tokens": [
+    "A",
+    "\u0120little",
+    "\u0120fox",
+    "\u0120found",
+    "\u0120a",
+    "\u0120red",
+    "\u0120ball",
+    "."
+  ],
+  "token_ids": [
+    35,
+    397,
+    1619,
+    590,
+    261,
+    917,
+    651,
+    16
+  ],
+  "decoded_text": "A little fox found a red ball.",
+  "batch_shapes": {
+    "input_ids": [
+      8,
+      256
+    ],
+    "labels": [
+      8,
+      256
+    ],
+    "attention_mask": [
+      8,
+      256
+    ]
+  },
+  "note": "This demonstrates the tokenizer and loader. The language model has not been built yet."
+}

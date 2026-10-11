@@ -1,0 +1,64 @@
+Blaude tokenizer demo
+{
+  "original_text": "A little cat went to school.",
+  "cleaned_text": "A little cat went to school.",
+  "tokens": [
+    "A",
+    "\u0120little",
+    "\u0120cat",
+    "\u0120went",
+    "\u0120to",
+    "\u0120school",
+    "."
+  ],
+  "token_ids": [
+    35,
+    397,
+    697,
+    468,
+    268,
+    1790,
+    16
+  ],
+  "decoded_text": "A little cat went to school.",
+  "batch_shapes": {
+    "input_ids": [
+      8,
+      256
+    ],
+    "labels": [
+      8,
+      256
+    ],
+    "attention_mask": [
+      8,
+      256
+    ]
+  },
+  "note": "This demonstrates the tokenizer and loader. The language model has not been built yet."
+}
+Dataset verification
+{
+  "status": "passed",
+  "checked_files": 12,
+  "splits": {
+    "train": {
+      "stories": 18000,
+      "tokens": 3938251,
+      "windows": 21857
+    },
+    "validation": {
+      "stories": 1000,
+      "tokens": 223861,
+      "windows": 1235
+    },
+    "test": {
+      "stories": 1000,
+      "tokens": 218490,
+      "windows": 1224
+    }
+  }
+}
+Automated tests
+.........                                                                [100%]
+9 passed in 4.07s
