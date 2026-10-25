@@ -1,8 +1,42 @@
 # Blaude
 
 Blaude is a Course 299 project to build a small English language model from scratch.
-Week 1 is implemented: prepare the stories, train a new tokenizer, and load the
-data in batches. The Transformer and language-model training will come later.
+Weeks 1 and 2 are implemented: prepare stories, train a tokenizer, load batches,
+and build a decoder-only Transformer. A tiny-batch experiment checks that it can
+learn. Full dataset training and a chat interface are later work.
+
+## Run Week 2 in VS Code
+
+Open **Terminal > New Terminal** in this project folder. Install CPU-only PyTorch
+once (internet required), then run the model checks and tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-week2.txt
+.\.venv\Scripts\python.exe -m blaude.week2
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+If the environment is already active (`(.venv)` appears at the prompt), you can
+use `python -m blaude.week2` and `python -m pytest -q` instead. On a new computer,
+complete the Week 1 setup and data preparation below first. Week 2 uses only the
+training split and runs on a CPU without an API key or pretrained weights.
+
+The terminal shows the full model's parameter count and output shape, a causal
+attention check, and the small model's decreasing loss. Results are saved under
+`artifacts/week2/`. To repeat without overwriting an earlier run:
+
+```powershell
+.\.venv\Scripts\python.exe -m blaude.week2 --output artifacts/week2-repeat
+```
+
+The full model has four Transformer blocks, four attention heads, 256-wide
+embeddings, and context length 256. The diagnostic uses a smaller version with
+two blocks, width 64, context 64, and no dropout. It must reduce its initial loss
+by more than 90% and reach at least 95% next-token accuracy on the same fixed batch.
+This intentionally tests memorization, not general language ability. There is no
+chat interface or free-text generation command yet.
+
+See [the model guide](docs/week_2_model.md) for explanations of the code and masks.
 
 ## Run the completed Week 1 work
 
@@ -89,10 +123,10 @@ for batch in dataset.batches(batch_size=8, shuffle=True, seed=299):
 
 Each story is divided into chunks of at most 256 input tokens. Targets are shifted
 one token forward. Chunks never cross story boundaries, and short final chunks are
-padded. Padding targets use `-100` so the future loss function can ignore them.
-The boolean attention mask marks padding; Week 2's model must also implement a
-causal mask. The first token of a story is context, with no prediction target
-before it. Arrays can later be converted with `torch.from_numpy`.
+padded. Padding targets use `-100`, which the model's loss function ignores.
+The boolean attention mask marks padding; Week 2's model adds a causal mask.
+The first token of a story is context, with no prediction target before it.
+`blaude.torch_data.to_torch_batch` converts these arrays to PyTorch tensors.
 
 ## Files
 
@@ -104,10 +138,14 @@ before it. Arrays can later be converted with `torch.from_numpy`.
 | `blaude/prepare.py` | Run the complete preparation pipeline |
 | `blaude/check.py` | Verify checksums, splits, encodings, and batch padding |
 | `blaude/demo.py` | A small demonstration for the weekly update |
+| `blaude/model.py` | Embeddings, causal attention, and Transformer blocks |
+| `blaude/torch_data.py` | Convert Week 1 batches to PyTorch tensors |
+| `blaude/week2.py` | Architecture checks and the tiny-batch learning experiment |
 | `tests/` | Offline tests for data handling and training batches |
 | `data/raw/` | Download cache and source metadata |
 | `data/week1/` | Prepared splits, tokenizer, arrays, examples, and manifest |
-| `reports/` | Week 1 results and recorded checks |
+| `reports/` | Weekly updates, experiment results, and recorded checks |
+| `artifacts/week2/` | Local diagnostic weights, metrics, and loss history |
 
 Data, the local environment, and temporary document files are excluded from Git.
 The source code and scripts recreate the data artifacts.
