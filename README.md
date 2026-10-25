@@ -3,7 +3,25 @@
 Blaude is a Course 299 project to build a small English language model from scratch.
 Weeks 1 and 2 are implemented: prepare stories, train a tokenizer, load batches,
 and build a decoder-only Transformer. A tiny-batch experiment checks that it can
-learn. Full dataset training and a chat interface are later work.
+learn. The first half of Week 3 adds a reusable training loop, validation, and
+progress logs. Longer training and a chat interface are later work.
+
+## Run Week 3, first half
+
+After completing the Week 1 setup and installing `requirements-week2.txt`, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m blaude.train
+```
+
+This runs 50 CPU training steps with a smaller model, using different training
+batches. It checks a fixed validation sample before training and every 25 steps.
+Settings and loss logs are saved in `artifacts/week3-part1/`. This version does
+**not save learned weights or resume training**; those are in the remaining half.
+To repeat, choose a fresh folder with `--output artifacts/week3-part1-repeat`.
+
+See [the Week 3 part 1 guide](docs/week_3_part_1.md) for the steps, output, and
+remaining work. The existing Week 2 diagnostic is still available below.
 
 ## Run Week 2 in VS Code
 
@@ -141,6 +159,7 @@ The first token of a story is context, with no prediction target before it.
 | `blaude/model.py` | Embeddings, causal attention, and Transformer blocks |
 | `blaude/torch_data.py` | Convert Week 1 batches to PyTorch tensors |
 | `blaude/week2.py` | Architecture checks and the tiny-batch learning experiment |
+| `blaude/train.py` | Training across batches, validation, and loss logs (Week 3 part 1) |
 | `tests/` | Offline tests for data handling and training batches |
 | `data/raw/` | Download cache and source metadata |
 | `data/week1/` | Prepared splits, tokenizer, arrays, examples, and manifest |
