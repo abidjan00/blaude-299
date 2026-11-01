@@ -4,7 +4,26 @@ Blaude is a Course 299 project to build a small English language model from scra
 Weeks 1 and 2 are implemented: prepare stories, train a tokenizer, load batches,
 and build a decoder-only Transformer. A tiny-batch experiment checks that it can
 learn. Week 3 adds training, validation, resumable checkpoints, a bigram baseline,
-and loss charts. A chat interface is later work.
+and loss charts. Week 4 adds saved-model text samples and full-validation evaluation.
+A chat interface is later work.
+
+## Run Week 4: training and early text samples
+
+After the setup below, install `requirements-week3.txt`. These examples use an
+active Python environment. A full CPU training pass can take a while:
+
+```powershell
+python -m blaude.train --preset full --steps 1367 --batch-size 16 --eval-every 100 --validation-batches 20 --threads 4 --output artifacts/week4-full
+python -m blaude.generate --checkpoint artifacts/week4-full/best.pt --prompt "Once upon a time, there was a little"
+python -m blaude.evaluate --checkpoint artifacts/week4-full/best.pt --output artifacts/week4-full/full-validation.json
+```
+
+With the original 20,000-story preparation, 1,367 steps cover one complete pass
+of the training split. Checkpoints and charts stay local; she must train on her
+device or copy a checkpoint and its matching tokenizer from this device.
+The code in GitHub alone does not include trained weights. Early samples can
+be repetitive or incoherent. Read [the Week 4 guide](docs/week_4.md) for recovery,
+demonstration commands, and what the evaluation means.
 
 ## Run the completed Week 3 work
 
@@ -61,7 +80,8 @@ embeddings, and context length 256. The diagnostic uses a smaller version with
 two blocks, width 64, context 64, and no dropout. It must reduce its initial loss
 by more than 90% and reach at least 95% next-token accuracy on the same fixed batch.
 This intentionally tests memorization, not general language ability. There is no
-chat interface or free-text generation command yet.
+chat interface. Week 4's separate generation command uses training checkpoints;
+this Week 2 diagnostic still checks only fixed-batch memorization.
 
 See [the model guide](docs/week_2_model.md) for explanations of the code and masks.
 
