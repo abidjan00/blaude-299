@@ -3,10 +3,10 @@
 Blaude is a Course 299 project to build a small English language model from scratch.
 Weeks 1 and 2 are implemented: prepare stories, train a tokenizer, load batches,
 and build a decoder-only Transformer. A tiny-batch experiment checks that it can
-learn. The first half of Week 3 adds a reusable training loop, validation, and
-progress logs. Longer training and a chat interface are later work.
+learn. Week 3 adds training, validation, resumable checkpoints, a bigram baseline,
+and loss charts. A chat interface is later work.
 
-## Run Week 3, first half
+## Run the completed Week 3 work
 
 After completing the Week 1 setup and installing `requirements-week2.txt`, run:
 
@@ -14,14 +14,23 @@ After completing the Week 1 setup and installing `requirements-week2.txt`, run:
 .\.venv\Scripts\python.exe -m blaude.train
 ```
 
-This runs 50 CPU training steps with a smaller model, using different training
-batches. It checks a fixed validation sample before training and every 25 steps.
-Settings and loss logs are saved in `artifacts/week3-part1/`. This version does
-**not save learned weights or resume training**; those are in the remaining half.
-To repeat, choose a fresh folder with `--output artifacts/week3-part1-repeat`.
+First install the chart dependency with
+`.\.venv\Scripts\python.exe -m pip install -r requirements-week3.txt`.
+The command above runs 50 CPU steps with a smaller model, using different batches.
+It saves `last.pt`, `best.pt`, settings, logs, and `loss.png` in `artifacts/week3/`.
+The default checks a fixed validation sample; `--validation-batches 0` checks all.
+To repeat, choose a fresh folder with `--output artifacts/week3-repeat`.
 
-See [the Week 3 part 1 guide](docs/week_3_part_1.md) for the steps, output, and
-remaining work. The existing Week 2 diagnostic is still available below.
+Continue that run to a total of 100 steps, or fit the comparison model:
+
+```powershell
+.\.venv\Scripts\python.exe -m blaude.train --resume artifacts/week3/last.pt --steps 100 --output artifacts/week3-continued
+.\.venv\Scripts\python.exe -m blaude.bigram
+```
+
+See [the complete Week 3 guide](docs/week_3.md) for checkpoints, comparison, and
+charts. The earlier [part 1 guide](docs/week_3_part_1.md) describes the historical
+version before checkpoint support. The Week 2 diagnostic remains available below.
 
 ## Run Week 2 in VS Code
 

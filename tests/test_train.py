@@ -94,9 +94,9 @@ def test_training_visits_batches_restarts_epochs_and_keeps_validation_separate(p
     assert sum(int(row["train_tokens"]) for row in rows) == summary["total_training_targets"]
     assert summary["epochs_started"] == 3 and summary["steps_completed"] == 5
     assert summary["final_validation_full_split"]
-    assert not summary["weights_saved"] and not summary["resumable"]
+    assert summary["weights_saved"] and summary["resumable"]
     assert json.loads((output / "summary.json").read_text()) == summary
-    assert {p.name for p in output.iterdir()} == {"config.json", "history.csv", "summary.json"}
+    assert {p.name for p in output.iterdir()} == {"config.json", "history.csv", "summary.json", "last.pt", "best.pt", "loss.png"}
 
 
 def test_fixed_seed_reproduces_losses(prepared, tmp_path):
@@ -130,3 +130,51 @@ def test_invalid_settings_fail_before_creating_output(tmp_path, kwargs):
     with pytest.raises(ValueError):
         run_training(tmp_path / "missing", tmp_path / "run", **kwargs)
     assert not (tmp_path / "run").exists()
+
+
+@pytest.mark.parametrize("split_step", [2, 3])
+def test_resuming_matches_uninterrupted_training_even_across_epochs(prepared, tmp_path, split_step):
+    from blaude.checkpoint import load_checkpoint
+    settings = dict(batch_size=1, eval_every=2, validation_batches=0, threads=1)
+    run_training(prepared, tmp_path / "continuous", steps=6, **settings)
+    run_training(prepared, tmp_path / "partial", steps=split_step, **settings)
+    run_training(prepared, tmp_path / "resumed", steps=6,
+                 resume=tmp_path / "partial/last.pt", **settings)
+    a = load_checkpoint(tmp_path / "continuous/last.pt")
+    b = load_checkpoint(tmp_path / "resumed/last.pt")
+    assert a["step"] == b["step"] == 6
+    assert a["total_training_targets"] == b["total_training_targets"]
+    assert torch.equal(a["torch_rng_state"], b["torch_rng_state"])
+    for name in a["model_state_dict"]:
+        assert torch.equal(a["model_state_dict"][name], b["model_state_dict"][name]), name
+    for key, values in a["optimizer_state_dict"]["state"].items():
+        for field, value in values.items():
+            assert torch.equal(value, b["optimizer_state_dict"]["state"][key][field])
+
+
+def test_resume_rejects_changed_settings_and_old_snapshot(prepared, tmp_path):
+    from blaude.checkpoint import load_checkpoint
+    run_training(prepared, tmp_path / "first", steps=1, threads=1)
+    with pytest.raises(ValueError, match="batch_size"):
+        run_training(prepared, tmp_path / "bad", steps=2, threads=1, batch_size=2,
+                     resume=tmp_path / "first/last.pt")
+    assert not (tmp_path / "bad").exists()
+    torch.save({"config": {}, "model_state_dict": {}}, tmp_path / "old.pt")
+    with pytest.raises(ValueError, match="Week 3"):
+        load_checkpoint(tmp_path / "old.pt")
+
+
+def test_failed_checkpoint_write_preserves_previous_checkpoint(tmp_path, monkeypatch):
+    from blaude.checkpoint import save_checkpoint
+    path = tmp_path / "last.pt"
+    path.write_bytes(b"previous good checkpoint")
+    model = BlaudeModel(ModelConfig(vocab_size=7, d_model=8, n_heads=2, n_layers=1, d_ff=16))
+    optimizer = torch.optim.AdamW(model.parameters())
+    def failed_write(state, target):
+        target.write_bytes(b"incomplete")
+        raise OSError("disk write interrupted")
+    monkeypatch.setattr(torch, "save", failed_write)
+    with pytest.raises(OSError):
+        save_checkpoint(path, model, optimizer, {}, 1, 10)
+    assert path.read_bytes() == b"previous good checkpoint"
+    assert not path.with_suffix('.tmp').exists()

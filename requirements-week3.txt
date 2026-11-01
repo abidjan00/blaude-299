@@ -1,0 +1,2 @@
+# Install requirements-lock.txt and requirements-week2.txt first.
+matplotlib==3.10.7

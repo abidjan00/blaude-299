@@ -1,5 +1,8 @@
 # Week 3, first half: training and progress tracking
 
+Historical guide for commit 686a88c. The current trainer now saves checkpoints
+and charts; use [the complete Week 3 guide](week_3.md) for current commands.
+
 Week 2 checked whether the model could memorize one small batch. This part adds
 a reusable training loop that moves through different batches of stories.
 

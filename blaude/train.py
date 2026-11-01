@@ -1,7 +1,4 @@
-"""Week 3, part 1: CPU training, held-out validation, and progress logs.
-
-This first version does not save model weights or resume interrupted training.
-"""
+"""CPU training with validation, exact continuation, checkpoints, and loss charts."""
 
 import argparse
 import csv
@@ -18,6 +15,7 @@ from .data import file_hash, write_json
 from .loader import TokenDataset
 from .model import BlaudeModel, ModelConfig
 from .torch_data import to_torch_batch
+from .checkpoint import load_checkpoint, save_checkpoint
 
 
 def evaluate(model, dataset, batch_size, max_batches=10):
@@ -77,13 +75,15 @@ def load_data(data_dir, context_length):
 
 def run_training(data_dir, output_dir, *, steps=50, batch_size=4, eval_every=25,
                  validation_batches=10, learning_rate=0.0003, seed=299,
-                 threads=2, preset="small"):
+                 threads=2, preset="small", resume=None):
     if min(steps, batch_size, eval_every, threads) < 1 or validation_batches < 0:
         raise ValueError("steps, batch size, evaluation interval, and threads must be positive; validation batches must be nonnegative")
     if not math.isfinite(learning_rate) or learning_rate <= 0:
         raise ValueError("Learning rate must be finite and positive")
     if preset not in {"small", "full"}:
         raise ValueError("preset must be small or full")
+    if not 0 <= seed < 2**63:
+        raise ValueError("seed must be between 0 and 2**63 - 1")
     output_dir = Path(output_dir)
     if output_dir.exists():
         raise ValueError("Output already exists; choose a new --output folder")
@@ -97,26 +97,44 @@ def run_training(data_dir, output_dir, *, steps=50, batch_size=4, eval_every=25,
     torch.use_deterministic_algorithms(True)
     model = BlaudeModel(config)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01)
-    output_dir.mkdir(parents=True, exist_ok=False)
     settings = {
-        "stage": "Week 3 part 1", "model": asdict(config), "parameters": model.parameter_count(),
+        "stage": "Week 3 complete", "model": asdict(config), "parameters": model.parameter_count(),
         "steps": steps, "batch_size": batch_size, "eval_every": eval_every,
         "validation_batches": validation_batches, "validation_selection": "fixed prefix, no shuffle",
         "learning_rate": learning_rate, "weight_decay": 0.01, "gradient_clip": 1.0,
         "seed": seed, "threads": threads, "preset": preset, "device": "cpu",
         "torch_version": str(torch.__version__), "source_data_sha256": hashes,
         "source_code_sha256": {name: file_hash(Path(__file__).parent / name)
-                               for name in ("train.py", "model.py", "loader.py", "torch_data.py")},
-        "weights_saved": False, "resumable": False,
+                               for name in ("train.py", "model.py", "loader.py", "torch_data.py", "checkpoint.py")},
+        "weights_saved": True, "resumable": True,
     }
+    start_step, total_train_tokens = 0, 0
+    if resume is not None:
+        state = load_checkpoint(resume)
+        for key in ("model", "batch_size", "seed", "learning_rate", "weight_decay", "gradient_clip",
+                    "threads", "torch_version", "source_data_sha256", "source_code_sha256",
+                    "eval_every", "validation_batches"):
+            if settings[key] != state["settings"][key]:
+                raise ValueError(f"Resume setting mismatch: {key}; use the original run settings")
+        start_step = state["step"]
+        if steps <= start_step:
+            raise ValueError("--steps is the total target and must exceed the saved step")
+        model.load_state_dict(state["model_state_dict"])
+        optimizer.load_state_dict(state["optimizer_state_dict"])
+        torch.set_rng_state(state["torch_rng_state"])
+        total_train_tokens = state["total_training_targets"]
+        settings["resumed_from"] = str(Path(resume).resolve())
+    # Check the plotting dependency before creating a run or spending time training.
+    import matplotlib  # noqa: F401
+    output_dir.mkdir(parents=True, exist_ok=False)
     write_json(output_dir / "config.json", settings)
     started = time.perf_counter()
-    print(f"Week 3 part 1: {model.parameter_count():,} parameters; {steps} CPU steps", flush=True)
-    print("Logs only in this version; model weights are not saved.", flush=True)
+    print(f"Blaude: {model.parameter_count():,} parameters; CPU steps {start_step} -> {steps}", flush=True)
+    print("Saving last.pt and the best validation checkpoint in this run as best.pt.", flush=True)
     if validation_batches:
         print(f"Validation uses at most {validation_batches} fixed batches, not necessarily the full split.", flush=True)
     history = []
-    total_train_tokens = 0
+    best_loss, best_step = float("inf"), start_step
     fields = ["step", "epoch", "train_loss", "train_tokens", "validation_loss",
               "validation_perplexity", "validation_tokens", "validation_full_split", "elapsed_seconds"]
     with (output_dir / "history.csv").open("w", encoding="utf-8", newline="") as handle:
@@ -124,6 +142,7 @@ def run_training(data_dir, output_dir, *, steps=50, batch_size=4, eval_every=25,
         writer.writeheader()
 
         def record(step, epoch, train_loss, train_tokens):
+            nonlocal best_loss, best_step
             validation = evaluate(model, validation_data, batch_size, validation_batches)
             row = {"step": step, "epoch": epoch, "train_loss": train_loss,
                    "train_tokens": train_tokens, "validation_loss": validation["loss"],
@@ -136,12 +155,20 @@ def run_training(data_dir, output_dir, *, steps=50, batch_size=4, eval_every=25,
             history.append(row)
             train_text = "before training" if train_loss is None else f"train loss {train_loss:.4f}"
             print(f"Step {step}: {train_text}; validation loss {validation['loss']:.4f}", flush=True)
+            save_checkpoint(output_dir / "last.pt", model, optimizer, settings, step, total_train_tokens)
+            if validation["loss"] < best_loss:
+                best_loss, best_step = validation["loss"], step
+                save_checkpoint(output_dir / "best.pt", model, optimizer, settings, step, total_train_tokens)
 
-        record(0, 0, None, 0)
-        epoch = 1
-        batches = iter(train_data.batches(batch_size, shuffle=True, seed=seed))
+        batches_per_epoch = math.ceil(len(train_data) / batch_size)
+        epoch = start_step // batches_per_epoch + 1
+        record(start_step, (start_step - 1) // batches_per_epoch + 1 if start_step else 0, None, 0)
+        batches = iter(train_data.batches(batch_size, shuffle=True, seed=seed + epoch - 1))
+        # Recreate the deterministic order, then skip only batches already learned.
+        for _ in range(start_step % batches_per_epoch):
+            next(batches)
         window_loss, window_tokens = 0.0, 0
-        for step in range(1, steps + 1):
+        for step in range(start_step + 1, steps + 1):
             try:
                 numpy_batch = next(batches)
             except StopIteration:
@@ -164,13 +191,18 @@ def run_training(data_dir, output_dir, *, steps=50, batch_size=4, eval_every=25,
             if step % eval_every == 0 or step == steps:
                 record(step, epoch, window_loss / window_tokens, window_tokens)
                 window_loss, window_tokens = 0.0, 0
-    summary = {"status": "completed", "steps_completed": steps, "epochs_started": epoch,
+    summary = {"status": "completed", "steps_completed": steps, "start_step": start_step,
+               "epochs_started": epoch, "completed_epochs": steps // batches_per_epoch,
+               "training_windows": len(train_data), "batches_per_epoch": batches_per_epoch,
                "total_training_targets": total_train_tokens, "initial_validation_loss": history[0]["validation_loss"],
                "final_validation_loss": history[-1]["validation_loss"],
                "final_validation_full_split": history[-1]["validation_full_split"],
-               "weights_saved": False, "resumable": False,
-               "limitation": "Short training check; no claim of text-generation quality. Test split unused."}
+               "weights_saved": True, "resumable": True,
+               "best_validation_loss": best_loss, "best_step_in_this_run": best_step,
+               "limitation": "Validation guides checkpoint selection. Test split unused; text quality requires separate inspection."}
     write_json(output_dir / "summary.json", summary)
+    from .plot import plot_history
+    plot_history(output_dir / "history.csv", output_dir / "loss.png")
     print(f"Completed. Progress logs saved in {output_dir}", flush=True)
     return summary
 
@@ -178,7 +210,8 @@ def run_training(data_dir, output_dir, *, steps=50, batch_size=4, eval_every=25,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=Path("data/week1"))
-    parser.add_argument("--output", type=Path, default=Path("artifacts/week3-part1"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/week3"))
+    parser.add_argument("--resume", type=Path, help="Continue a checkpoint into a NEW output folder; --steps is the total target")
     parser.add_argument("--steps", type=int, default=50)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--eval-every", type=int, default=25)
